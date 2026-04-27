@@ -62,8 +62,10 @@ python scripts/run_eval.py --max_samples 5 --prompt_len 512 --target_len 64 --de
 For a more stable Random baseline:
 
 ```bash
-python scripts/run_eval.py --max_samples 20 --prompt_len 512 --target_len 64 --device cpu --random_seeds 1 2 3 4 5
+python scripts/run_eval.py --max_samples 20 --prompt_len 512 --target_len 64 --device cpu --pair_mode sentence --random_seeds 1 2 3 4 5
 ```
+
+`--pair_mode sentence` makes the target start at a sentence boundary, which is a better match for sentence-level prompt compression. Use `--pair_mode token` to reproduce fixed token slicing.
 
 If HuggingFace downloads fail because of SSL or network interruptions, try a mirror or a local model directory:
 

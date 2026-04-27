@@ -110,8 +110,10 @@ python scripts/run_eval.py --max_samples 5 --prompt_len 512 --target_len 64 --de
 正式一点的评估建议使用多个 Random seeds：
 
 ```bash
-python scripts/run_eval.py --max_samples 20 --prompt_len 512 --target_len 64 --device cpu --random_seeds 1 2 3 4 5
+python scripts/run_eval.py --max_samples 20 --prompt_len 512 --target_len 64 --device cpu --pair_mode sentence --random_seeds 1 2 3 4 5
 ```
+
+`--pair_mode sentence` 会让 target 从句子边界开始，更适合本文的句子级 prompt compression 方法。若需要复现最初的固定 token 切分，可以使用 `--pair_mode token`。
 
 如果 HuggingFace 下载模型时出现 SSL、连接中断或超时，可以先尝试镜像：
 
@@ -257,6 +259,7 @@ python scripts/plot_results.py \
 --max_samples
 --prompt_len
 --target_len
+--pair_mode
 --keep_ratios
 --methods
 --output
@@ -276,6 +279,7 @@ python scripts/plot_results.py \
 --split
 --max_samples
 --prompt_len
+--pair_mode
 --keep_ratios
 --methods
 --max_new_tokens

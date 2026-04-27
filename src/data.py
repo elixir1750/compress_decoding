@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Dict, List
 
 from datasets import load_dataset
@@ -40,6 +41,14 @@ FALLBACK_TEXTS = [
     )
     * 100,
 ]
+
+
+def split_sentences_for_pairs(text: str) -> List[str]:
+    """Split text into sentences for sentence-boundary pair construction."""
+    if not text or not text.strip():
+        return []
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s.strip()]
+    return sentences if sentences else [text.strip()]
 
 
 def load_text_samples(
@@ -94,8 +103,44 @@ def build_prompt_target_pairs(
     prompt_len: int = 1024,
     target_len: int = 128,
     max_pairs: int = 20,
+    pair_mode: str = "sentence",
 ) -> List[Dict[str, object]]:
-    """Build prompt-target pairs by slicing tokenized texts."""
+    """Build prompt-target pairs from texts.
+
+    In ``token`` mode, pairs are built with the original fixed token slicing
+    strategy. In ``sentence`` mode, the prompt ends at a sentence boundary and
+    the target begins from the following sentence, which better matches the
+    sentence-level compression methods used in this project.
+    """
+    if pair_mode not in {"token", "sentence"}:
+        raise ValueError("pair_mode must be either 'token' or 'sentence'")
+
+    if pair_mode == "sentence":
+        return build_sentence_prompt_target_pairs(
+            texts,
+            tokenizer,
+            prompt_len=prompt_len,
+            target_len=target_len,
+            max_pairs=max_pairs,
+        )
+
+    return build_token_prompt_target_pairs(
+        texts,
+        tokenizer,
+        prompt_len=prompt_len,
+        target_len=target_len,
+        max_pairs=max_pairs,
+    )
+
+
+def build_token_prompt_target_pairs(
+    texts: List[str],
+    tokenizer,
+    prompt_len: int = 1024,
+    target_len: int = 128,
+    max_pairs: int = 20,
+) -> List[Dict[str, object]]:
+    """Build prompt-target pairs by fixed token slicing."""
     pairs: List[Dict[str, object]] = []
     required_tokens = prompt_len + target_len
 
@@ -115,6 +160,69 @@ def build_prompt_target_pairs(
                 "target_text": target_text,
                 "prompt_len": len(prompt_tokens),
                 "target_len": len(target_tokens),
+            }
+        )
+        if len(pairs) >= max_pairs:
+            break
+
+    return pairs
+
+
+def build_sentence_prompt_target_pairs(
+    texts: List[str],
+    tokenizer,
+    prompt_len: int = 1024,
+    target_len: int = 128,
+    max_pairs: int = 20,
+) -> List[Dict[str, object]]:
+    """Build prompt-target pairs where target text starts at a sentence boundary."""
+    pairs: List[Dict[str, object]] = []
+    min_prompt_tokens = max(1, int(prompt_len * 0.6))
+
+    for text in texts:
+        sentences = split_sentences_for_pairs(text)
+        if len(sentences) < 2:
+            continue
+
+        prompt_sentences: List[str] = []
+        prompt_tokens: List[int] = []
+        sentence_idx = 0
+
+        while sentence_idx < len(sentences):
+            candidate_prompt = " ".join(prompt_sentences + [sentences[sentence_idx]])
+            candidate_tokens = tokenizer.encode(candidate_prompt, add_special_tokens=False)
+            if prompt_sentences and len(candidate_tokens) > prompt_len:
+                break
+
+            prompt_sentences.append(sentences[sentence_idx])
+            prompt_tokens = candidate_tokens
+            sentence_idx += 1
+
+            if len(prompt_tokens) >= prompt_len:
+                break
+
+        if len(prompt_tokens) < min_prompt_tokens or sentence_idx >= len(sentences):
+            continue
+
+        target_sentences: List[str] = []
+        target_tokens: List[int] = []
+        while sentence_idx < len(sentences) and len(target_tokens) < target_len:
+            target_sentences.append(sentences[sentence_idx])
+            target_text = " ".join(target_sentences)
+            target_tokens = tokenizer.encode(target_text, add_special_tokens=False)
+            sentence_idx += 1
+
+        if len(target_tokens) < target_len:
+            continue
+
+        prompt_text = tokenizer.decode(prompt_tokens, skip_special_tokens=True)
+        target_text = tokenizer.decode(target_tokens[:target_len], skip_special_tokens=True)
+        pairs.append(
+            {
+                "prompt_text": prompt_text,
+                "target_text": target_text,
+                "prompt_len": len(prompt_tokens),
+                "target_len": min(len(target_tokens), target_len),
             }
         )
         if len(pairs) >= max_pairs:

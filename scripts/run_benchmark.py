@@ -30,6 +30,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--split", default="test")
     parser.add_argument("--max_samples", type=int, default=10)
     parser.add_argument("--prompt_len", type=int, default=1024)
+    parser.add_argument(
+        "--pair_mode",
+        choices=["sentence", "token"],
+        default="sentence",
+        help="Build prompt-target pairs by sentence boundary or fixed token slicing.",
+    )
     parser.add_argument("--keep_ratios", type=float, nargs="+", default=[0.25, 0.5, 0.75])
     parser.add_argument("--methods", nargs="+", default=["full", "first", "last", "random", "tfidf", "bp_rpc"])
     parser.add_argument("--max_new_tokens", type=int, default=32)
@@ -89,6 +95,7 @@ def main() -> None:
         prompt_len=args.prompt_len,
         target_len=args.max_new_tokens,
         max_pairs=args.max_samples,
+        pair_mode=args.pair_mode,
     )
     if not pairs:
         raise RuntimeError("No prompt samples could be built. Try smaller --prompt_len.")
@@ -104,7 +111,7 @@ def main() -> None:
 
         for keep_ratio in args.keep_ratios:
             for method, random_seed in method_runs:
-                budget = args.prompt_len if method == "full" else max(1, int(args.prompt_len * keep_ratio))
+                budget = original_prompt_tokens if method == "full" else max(1, int(original_prompt_tokens * keep_ratio))
                 run_seed = args.seed if random_seed is None else random_seed
                 compressed_prompt = compress_prompt(method, prompt_text, tokenizer, budget, run_seed)
                 compressed_prompt_tokens = count_tokens(compressed_prompt, tokenizer)

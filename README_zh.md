@@ -223,6 +223,15 @@ results/figures/
 python scripts/plot_results.py --max_ppl 200
 ```
 
+如果 PPL 的方差很大，建议同时看中位数图和逐样本 winner count：
+
+```bash
+python scripts/plot_results.py --agg median
+python scripts/summarize_results.py
+```
+
+这可以避免少数样本把 mean PPL 拉偏，尤其适合分析 Random baseline。
+
 也可以指定输入和输出路径：
 
 ```bash
@@ -239,6 +248,7 @@ python scripts/plot_results.py \
 - **PPL vs keep ratio**：比较不同压缩比例下的质量变化。
 - **compressed tokens vs latency**：分析输入 token 数与推理时间的关系。
 - **speedup vs quality trade-off**：展示加速收益和 PPL 损失之间的折中。
+- **winner counts**：用 `scripts/summarize_results.py` 查看每个样本上谁最好，避免只看 mean PPL。
 
 一个简单的结果分析角度是：
 

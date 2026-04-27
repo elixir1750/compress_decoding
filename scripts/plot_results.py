@@ -40,6 +40,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--format", default="png", choices=["png", "pdf", "svg"], help="Output figure format.")
     parser.add_argument("--dpi", type=int, default=180, help="Figure DPI for raster outputs.")
     parser.add_argument(
+        "--agg",
+        default="mean",
+        choices=["mean", "median"],
+        help="Aggregation used for line plots. Median is more robust to PPL outliers.",
+    )
+    parser.add_argument(
         "--max_ppl",
         type=float,
         default=None,
@@ -92,7 +98,7 @@ def save_current_figure(output_dir: Path, filename: str, fmt: str, dpi: int) -> 
     return output_path
 
 
-def aggregate_metric(df: pd.DataFrame, metric: str) -> pd.DataFrame:
+def aggregate_metric(df: pd.DataFrame, metric: str, agg: str = "mean") -> pd.DataFrame:
     """Aggregate a metric by method and keep ratio."""
     required = {"method", "keep_ratio", metric}
     missing = required - set(df.columns)
@@ -102,13 +108,22 @@ def aggregate_metric(df: pd.DataFrame, metric: str) -> pd.DataFrame:
     plot_df = df.copy()
     plot_df[metric] = pd.to_numeric(plot_df[metric], errors="coerce")
     plot_df = plot_df.replace([np.inf, -np.inf], np.nan).dropna(subset=[metric])
-    agg = (
+    if agg == "median":
+        agg_df = (
+            plot_df.groupby(["method", "keep_ratio"])[metric]
+            .agg(["median", "mean", "std"])
+            .reset_index()
+            .rename(columns={"median": metric, "mean": f"{metric}_mean", "std": f"{metric}_std"})
+        )
+        return agg_df
+
+    agg_df = (
         plot_df.groupby(["method", "keep_ratio"])[metric]
         .agg(["mean", "std"])
         .reset_index()
         .rename(columns={"mean": metric, "std": f"{metric}_std"})
     )
-    return agg
+    return agg_df
 
 
 def plot_line_metric(
@@ -121,18 +136,19 @@ def plot_line_metric(
     fmt: str,
     dpi: int,
     y_clip: Optional[float] = None,
+    agg: str = "mean",
 ) -> Optional[Path]:
     """Plot a metric against keep ratio for all methods."""
     if df.empty or metric not in df.columns:
         return None
 
-    agg = aggregate_metric(df, metric)
+    agg_df = aggregate_metric(df, metric, agg=agg)
     if y_clip is not None:
-        agg[metric] = agg[metric].clip(upper=y_clip)
+        agg_df[metric] = agg_df[metric].clip(upper=y_clip)
 
     plt.figure()
-    for method in sorted(agg["method"].unique(), key=method_sort_key):
-        method_df = agg[agg["method"] == method].sort_values("keep_ratio")
+    for method in sorted(agg_df["method"].unique(), key=method_sort_key):
+        method_df = agg_df[agg_df["method"] == method].sort_values("keep_ratio")
         if method_df.empty:
             continue
         plt.plot(
@@ -145,9 +161,11 @@ def plot_line_metric(
 
     plt.xlabel("Keep ratio")
     plt.ylabel(ylabel)
-    plt.title(title)
+    agg_label = "Median" if agg == "median" else "Mean"
+    plt.title(f"{title} ({agg_label})")
     plt.legend(ncol=2)
-    return save_current_figure(output_dir, filename, fmt, dpi)
+    output_name = filename if agg == "mean" else f"{filename}_{agg}"
+    return save_current_figure(output_dir, output_name, fmt, dpi)
 
 
 def plot_compressed_tokens(
@@ -155,6 +173,7 @@ def plot_compressed_tokens(
     output_dir: Path,
     fmt: str,
     dpi: int,
+    agg: str = "mean",
 ) -> Optional[Path]:
     """Plot compressed prompt token count against keep ratio."""
     if "compressed_prompt_tokens" not in df.columns:
@@ -168,6 +187,7 @@ def plot_compressed_tokens(
         "compressed_tokens_vs_keep_ratio",
         fmt,
         dpi,
+        agg=agg,
     )
 
 
@@ -196,6 +216,7 @@ def plot_speedup(
     output_dir: Path,
     fmt: str,
     dpi: int,
+    agg: str = "mean",
 ) -> Optional[Path]:
     """Plot generation speedup relative to the full prompt baseline."""
     if benchmark_df.empty:
@@ -205,15 +226,16 @@ def plot_speedup(
     if speedup_df.empty:
         return None
 
-    agg = (
+    agg_func = "median" if agg == "median" else "mean"
+    agg_df = (
         speedup_df.groupby(["method", "keep_ratio"], as_index=False)["speedup_vs_full"]
-        .mean()
+        .agg(agg_func)
         .sort_values(["method", "keep_ratio"])
     )
 
     plt.figure()
-    for method in sorted(agg["method"].unique(), key=method_sort_key):
-        method_df = agg[agg["method"] == method].sort_values("keep_ratio")
+    for method in sorted(agg_df["method"].unique(), key=method_sort_key):
+        method_df = agg_df[agg_df["method"] == method].sort_values("keep_ratio")
         plt.plot(
             method_df["keep_ratio"],
             method_df["speedup_vs_full"],
@@ -225,9 +247,11 @@ def plot_speedup(
     plt.axhline(1.0, color="black", linewidth=1, linestyle="--", alpha=0.6)
     plt.xlabel("Keep ratio")
     plt.ylabel("Speedup vs Full Prompt")
-    plt.title("Speedup vs Keep Ratio")
+    agg_label = "Median" if agg == "median" else "Mean"
+    plt.title(f"Speedup vs Keep Ratio ({agg_label})")
     plt.legend(ncol=2)
-    return save_current_figure(output_dir, "speedup_vs_keep_ratio", fmt, dpi)
+    filename = "speedup_vs_keep_ratio" if agg == "mean" else f"speedup_vs_keep_ratio_{agg}"
+    return save_current_figure(output_dir, filename, fmt, dpi)
 
 
 def plot_quality_speed_tradeoff(
@@ -237,6 +261,7 @@ def plot_quality_speed_tradeoff(
     fmt: str,
     dpi: int,
     max_ppl: Optional[float] = None,
+    agg: str = "mean",
 ) -> Optional[Path]:
     """Plot speedup against target-token PPL."""
     if eval_df.empty or benchmark_df.empty:
@@ -244,12 +269,13 @@ def plot_quality_speed_tradeoff(
     if "ppl" not in eval_df.columns:
         return None
 
-    ppl = aggregate_metric(eval_df, "ppl")[["method", "keep_ratio", "ppl"]]
+    ppl = aggregate_metric(eval_df, "ppl", agg=agg)[["method", "keep_ratio", "ppl"]]
     if max_ppl is not None:
         ppl["ppl"] = ppl["ppl"].clip(upper=max_ppl)
 
     speedup = compute_speedup(benchmark_df)
-    speedup = speedup.groupby(["method", "keep_ratio"], as_index=False)["speedup_vs_full"].mean()
+    agg_func = "median" if agg == "median" else "mean"
+    speedup = speedup.groupby(["method", "keep_ratio"], as_index=False)["speedup_vs_full"].agg(agg_func)
     merged = ppl.merge(speedup, on=["method", "keep_ratio"], how="inner")
     if merged.empty:
         return None
@@ -270,9 +296,11 @@ def plot_quality_speed_tradeoff(
     plt.axhline(1.0, color="black", linewidth=1, linestyle="--", alpha=0.6)
     plt.xlabel("Target-token PPL")
     plt.ylabel("Speedup vs Full Prompt")
-    plt.title("Speedup vs Quality Trade-off")
+    agg_label = "Median" if agg == "median" else "Mean"
+    plt.title(f"Speedup vs Quality Trade-off ({agg_label})")
     plt.legend(ncol=2)
-    return save_current_figure(output_dir, "speedup_vs_ppl_tradeoff", fmt, dpi)
+    filename = "speedup_vs_ppl_tradeoff" if agg == "mean" else f"speedup_vs_ppl_tradeoff_{agg}"
+    return save_current_figure(output_dir, filename, fmt, dpi)
 
 
 def read_csv_if_exists(path: Path) -> pd.DataFrame:
@@ -319,6 +347,7 @@ def main() -> None:
             args.format,
             args.dpi,
             y_clip=args.max_ppl,
+            agg=args.agg,
         )
     )
     outputs.append(
@@ -331,10 +360,11 @@ def main() -> None:
             "loss_vs_keep_ratio",
             args.format,
             args.dpi,
+            agg=args.agg,
         )
     )
     token_source = eval_df if not eval_df.empty else benchmark_df
-    outputs.append(plot_compressed_tokens(token_source, output_dir, args.format, args.dpi))
+    outputs.append(plot_compressed_tokens(token_source, output_dir, args.format, args.dpi, agg=args.agg))
     outputs.append(
         plot_line_metric(
             benchmark_df,
@@ -345,6 +375,7 @@ def main() -> None:
             "latency_vs_keep_ratio",
             args.format,
             args.dpi,
+            agg=args.agg,
         )
     )
     outputs.append(
@@ -357,9 +388,10 @@ def main() -> None:
             "throughput_vs_keep_ratio",
             args.format,
             args.dpi,
+            agg=args.agg,
         )
     )
-    outputs.append(plot_speedup(benchmark_df, output_dir, args.format, args.dpi))
+    outputs.append(plot_speedup(benchmark_df, output_dir, args.format, args.dpi, agg=args.agg))
     outputs.append(
         plot_quality_speed_tradeoff(
             eval_df,
@@ -368,6 +400,7 @@ def main() -> None:
             args.format,
             args.dpi,
             max_ppl=args.max_ppl,
+            agg=args.agg,
         )
     )
     print_outputs(outputs)

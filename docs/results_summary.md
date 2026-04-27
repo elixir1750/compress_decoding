@@ -23,6 +23,18 @@ Evaluation setup:
 
 BP-RPC is strongest among compressed methods at the 25% keep ratio in this run. At 75%, the single-seed Random baseline happens to perform unusually well, which is why formal runs should average Random over multiple seeds.
 
+Mean PPL is sensitive to outlier samples. The median PPL plot gives a complementary view of typical-case behavior:
+
+![Median PPL vs Keep Ratio](figures/ppl_vs_keep_ratio_median.png)
+
+Per-sample winner counts after averaging Random seeds:
+
+| Keep ratio | First-K | Last-K | Random | TF-IDF | BP-RPC |
+|---|---:|---:|---:|---:|---:|
+| 0.25 | 5 | 5 | 2 | 2 | 6 |
+| 0.50 | 4 | 7 | 1 | 1 | 7 |
+| 0.75 | 5 | 4 | 2 | 1 | 8 |
+
 ## Generation Speedup
 
 Benchmark setup:

@@ -101,6 +101,13 @@ python scripts/plot_results.py
 
 Figures are saved to `results/figures/` by default. The script creates PPL, loss, compressed-token, latency, throughput, speedup, and speedup-vs-PPL trade-off plots when the required CSV columns are available.
 
+For PPL with large outliers, median plots are often more informative than mean plots:
+
+```bash
+python scripts/plot_results.py --agg median
+python scripts/summarize_results.py
+```
+
 If PPL outliers make the plot hard to read, clip the y-axis data:
 
 ```bash
@@ -120,6 +127,7 @@ Useful report tables and plots:
 - **PPL vs keep ratio**: compare quality degradation as prompts become shorter.
 - **Compressed tokens vs latency**: show how token count affects inference time.
 - **Speedup vs quality trade-off**: compare latency reduction against PPL increase.
+- **Winner counts**: use `scripts/summarize_results.py` to check which method wins per sample, since mean PPL can be dominated by a few outlier samples.
 
 ## Notes
 

@@ -6,7 +6,7 @@ This page summarizes one lightweight CPU run. The exact numbers may vary across 
 
 Evaluation setup:
 
-- Samples: 5
+- Samples: 20
 - Prompt length: 512 tokens
 - Target length: 64 tokens
 - Model: `EleutherAI/pythia-70m`
@@ -14,20 +14,20 @@ Evaluation setup:
 
 | Method | 0.25 | 0.50 | 0.75 |
 |---|---:|---:|---:|
-| Full | 51.13 | 51.13 | 51.13 |
-| First-K | 73.03 | 62.96 | 60.46 |
-| Last-K | 58.88 | 53.40 | 54.78 |
-| Random | 67.02 | 56.90 | 54.17 |
-| TF-IDF | 60.10 | 54.51 | 51.47 |
-| BP-RPC | 59.70 | 54.96 | 53.11 |
+| Full | 54.15 | 54.15 | 54.15 |
+| First-K | 98.58 | 73.61 | 68.34 |
+| Last-K | 89.50 | 72.59 | 70.99 |
+| Random | 92.66 | 80.01 | 58.72 |
+| TF-IDF | 88.95 | 72.45 | 67.80 |
+| BP-RPC | 85.53 | 76.39 | 72.18 |
 
-BP-RPC is substantially better than First-K and Random at 25% and 50% keep ratios, while staying close to the stronger Last-K and TF-IDF baselines.
+BP-RPC is strongest among compressed methods at the 25% keep ratio in this run. At 75%, the single-seed Random baseline happens to perform unusually well, which is why formal runs should average Random over multiple seeds.
 
 ## Generation Speedup
 
 Benchmark setup:
 
-- Samples: 2
+- Samples: 5
 - Prompt length: 512 tokens
 - Max new tokens: 16
 - Device: CPU
@@ -35,11 +35,11 @@ Benchmark setup:
 | Method | 0.25 | 0.50 | 0.75 |
 |---|---:|---:|---:|
 | Full | 1.00x | 1.00x | 1.00x |
-| First-K | 1.04x | 0.67x | 1.14x |
-| Last-K | 1.05x | 1.03x | 0.96x |
-| Random | 0.96x | 0.70x | 0.98x |
-| TF-IDF | 1.20x | 1.01x | 1.06x |
-| BP-RPC | 1.06x | 1.14x | 1.07x |
+| First-K | 3.69x | 1.93x | 1.37x |
+| Last-K | 3.87x | 2.02x | 1.41x |
+| Random | 3.75x | 2.05x | 1.42x |
+| TF-IDF | 3.89x | 2.09x | 1.40x |
+| BP-RPC | 3.87x | 1.92x | 1.39x |
 
 These speed numbers are illustrative. Laptop CPU benchmarks can be noisy, so the latency experiment is best interpreted together with compressed token counts and repeated runs.
 

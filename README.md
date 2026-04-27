@@ -18,6 +18,8 @@ The speed-quality trade-off plot is useful for report discussion, but benchmark 
 
 See [docs/results_summary.md](docs/results_summary.md) for a compact table summary of the example run.
 
+Note: the Random baseline is sensitive to a single seed. For formal runs, average it over multiple `--random_seeds` to avoid over-interpreting one lucky sample.
+
 ## Method Overview
 
 The project compares six prompt handling methods:
@@ -55,6 +57,12 @@ For a faster first run on MacBook Air:
 
 ```bash
 python scripts/run_eval.py --max_samples 5 --prompt_len 512 --target_len 64 --device cpu
+```
+
+For a more stable Random baseline:
+
+```bash
+python scripts/run_eval.py --max_samples 20 --prompt_len 512 --target_len 64 --device cpu --random_seeds 1 2 3 4 5
 ```
 
 If HuggingFace downloads fail because of SSL or network interruptions, try a mirror or a local model directory:

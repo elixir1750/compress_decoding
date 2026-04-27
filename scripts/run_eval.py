@@ -7,6 +7,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import Optional, Tuple
 
 import pandas as pd
 from tqdm import tqdm
@@ -34,6 +35,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--methods", nargs="+", default=["full", "first", "last", "random", "tfidf", "bp_rpc"])
     parser.add_argument("--output", default="results/eval_results.csv")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--random_seeds",
+        type=int,
+        nargs="+",
+        default=[1, 2, 3, 4, 5],
+        help="Seeds used for the Random baseline. Results are averaged by plotting scripts.",
+    )
     parser.add_argument("--device", choices=["cpu", "mps"], default=None)
     parser.add_argument("--cache_dir", default=None, help="Optional HuggingFace cache directory.")
     parser.add_argument("--local_files_only", action="store_true", help="Load the model from local cache only.")
@@ -48,6 +56,17 @@ def compress_prompt(method: str, prompt_text: str, tokenizer, budget: int, seed:
     if method == "random":
         return compressor(prompt_text, tokenizer, budget, seed=seed)
     return compressor(prompt_text, tokenizer, budget)
+
+
+def method_seed_runs(methods: list[str], random_seeds: list[int]) -> list[Tuple[str, Optional[int]]]:
+    """Expand methods so Random can be evaluated over multiple seeds."""
+    runs: list[Tuple[str, Optional[int]]] = []
+    for method in methods:
+        if method == "random":
+            runs.extend((method, seed) for seed in random_seeds)
+        else:
+            runs.append((method, None))
+    return runs
 
 
 def main() -> None:
@@ -75,7 +94,8 @@ def main() -> None:
         raise RuntimeError("No prompt-target pairs could be built. Try smaller --prompt_len/--target_len.")
 
     rows = []
-    total = len(pairs) * len(args.keep_ratios) * len(args.methods)
+    method_runs = method_seed_runs(args.methods, args.random_seeds)
+    total = len(pairs) * len(args.keep_ratios) * len(method_runs)
     progress = tqdm(total=total, desc="Evaluating")
 
     for sample_id, pair in enumerate(pairs):
@@ -84,9 +104,10 @@ def main() -> None:
         original_prompt_tokens = count_tokens(prompt_text, tokenizer)
 
         for keep_ratio in args.keep_ratios:
-            for method in args.methods:
+            for method, random_seed in method_runs:
                 budget = args.prompt_len if method == "full" else max(1, int(args.prompt_len * keep_ratio))
-                compressed_prompt = compress_prompt(method, prompt_text, tokenizer, budget, args.seed)
+                run_seed = args.seed if random_seed is None else random_seed
+                compressed_prompt = compress_prompt(method, prompt_text, tokenizer, budget, run_seed)
                 compressed_prompt_tokens = count_tokens(compressed_prompt, tokenizer)
                 metrics = evaluate_ppl(model, tokenizer, compressed_prompt, target_text, device)
 
@@ -94,6 +115,7 @@ def main() -> None:
                     {
                         "sample_id": sample_id,
                         "method": method,
+                        "random_seed": "" if random_seed is None else random_seed,
                         "keep_ratio": keep_ratio,
                         "original_prompt_tokens": original_prompt_tokens,
                         "compressed_prompt_tokens": compressed_prompt_tokens,
